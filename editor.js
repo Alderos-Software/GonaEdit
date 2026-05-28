@@ -19,7 +19,7 @@ const getLine = (text, pos, type) => {
 };
 
 const render = () => {
-  v.innerHTML = hl(e.value);
+  v.innerHTML = hl(e.value) + '\n';
   ln.textContent = e.value.split('\n').map((_,i)=>i+1).join('\n');
   v.scrollTop = ln.scrollTop = e.scrollTop;
   v.scrollLeft = e.scrollLeft;
