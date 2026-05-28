@@ -5,42 +5,28 @@ let file = "untitled.js", u = [], r = [];
 
 const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 
-const hl = t =>
-  esc(t)
-    .replace(/(\/\/.*)/g,'<span class=cm>$1</span>')
-    .replace(/(".*?"|'.*?'|`[\s\S]*?`)/g,'<span class=st>$1</span>')
-    .replace(/\b\d+\b/g,'<span class=nu>$&</span>')
-    .replace(/\b(function|return|if|else|for|while|const|let|var)\b/g,'<span class=kw>$1</span>');
+const hl = t => esc(t)
+  .replace(/(\/\/.*)/g,'<span class=cm>$1</span>')
+  .replace(/(".*?"|'.*?'|`[\s\S]*?`)/g,'<span class=st>$1</span>')
+  .replace(/\b\d+\b/g,'<span class=nu>$&</span>')
+  .replace(/\b(function|return|if|else|then|fi|for|while|const|let|var)\b/g,'<span class=kw>$1</span>');
 
-const sync = () => {
-  v.scrollTop = ln.scrollTop = e.scrollTop;
-  v.scrollLeft = e.scrollLeft;
+const getLine = (text, pos, type) => {
+  let start = text.lastIndexOf('\n', pos - 1) + 1;
+  let end = text.indexOf('\n', pos);
+  if (end === -1) end = text.length;
+  return type === 'indent' ? text.slice(start, pos).match(/^\t*/)[0] : text.slice(start, end).trim();
 };
 
 const render = () => {
   v.innerHTML = hl(e.value);
   ln.textContent = e.value.split('\n').map((_,i)=>i+1).join('\n');
-  sync();
+  v.scrollTop = ln.scrollTop = e.scrollTop;
+  v.scrollLeft = e.scrollLeft;
 };
 
 e.oninput = () => (u.push(e.value), r = [], render());
-e.onscroll = sync;
-
-const getLineIndent = (text, pos) => {
-  let lineStart = text.lastIndexOf('\n', pos - 1) + 1;
-  let indent = '';
-  for (let i = lineStart; i < text.length && text[i] === '\t'; i++) {
-    indent += '\t';
-  }
-  return indent;
-};
-
-const getLineContent = (text, pos) => {
-  let lineStart = text.lastIndexOf('\n', pos - 1) + 1;
-  let lineEnd = text.indexOf('\n', pos);
-  if (lineEnd === -1) lineEnd = text.length;
-  return text.slice(lineStart, lineEnd).trim();
-};
+e.onscroll = () => (v.scrollTop = ln.scrollTop = e.scrollTop, v.scrollLeft = e.scrollLeft);
 
 const bracketMap = { '(': ')', '[': ']', '{': '}' };
 
@@ -63,8 +49,7 @@ e.onkeydown = ev => {
   if (bracketMap[ev.key]) {
     ev.preventDefault();
     const i = e.selectionStart;
-    const closingBracket = bracketMap[ev.key];
-    e.value = e.value.slice(0,i) + ev.key + closingBracket + e.value.slice(i);
+    e.value = e.value.slice(0,i) + ev.key + bracketMap[ev.key] + e.value.slice(i);
     e.selectionStart = e.selectionEnd = i + 1;
     render();
     return;
@@ -73,20 +58,12 @@ e.onkeydown = ev => {
   if (ev.key === "Enter") {
     ev.preventDefault();
     const i = e.selectionStart;
-    const currentLine = getLineContent(e.value, i);
-    const indent = getLineIndent(e.value, i);
-
-    const charBefore = e.value[i - 1];
-    const charAfter = e.value[i];
-
-    if (charBefore === '{' && charAfter === '}') {
-      const newIndent = indent + '\t';
-      e.value = e.value.slice(0,i) + "\n" + newIndent + "\n" + indent + e.value.slice(i);
-      e.selectionStart = e.selectionEnd = i + 1 + newIndent.length;
-    } else {
-      e.value = e.value.slice(0,i) + "\n" + indent + e.value.slice(i);
-      e.selectionStart = e.selectionEnd = i + 1 + indent.length;
-    }
+    const indent = getLine(e.value, i, 'indent');
+    const charBefore = e.value[i - 1], charAfter = e.value[i];
+    const newIndent = charBefore === '{' && charAfter === '}' ? indent + '\t' : indent;
+    const newlineStr = charBefore === '{' && charAfter === '}' ? "\n" + newIndent + "\n" + indent : "\n" + indent;
+    e.value = e.value.slice(0,i) + newlineStr + e.value.slice(i);
+    e.selectionStart = e.selectionEnd = i + 1 + (charBefore === '{' && charAfter === '}' ? newIndent.length : indent.length);
     render();
     return;
   }
@@ -103,7 +80,6 @@ const save = async () => {
         types: [{ description: 'Text Files', accept: { 'text/*': ['.txt', '.js'] } }]
       });
     }
-
     const writable = await window.fileHandle.createWritable();
     await writable.write(e.value);
     await writable.close();
