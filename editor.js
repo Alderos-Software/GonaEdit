@@ -26,6 +26,24 @@ const render = () => {
 e.oninput = () => (u.push(e.value), r = [], render());
 e.onscroll = sync;
 
+const getLineIndent = (text, pos) => {
+  let lineStart = text.lastIndexOf('\n', pos - 1) + 1;
+  let indent = '';
+  for (let i = lineStart; i < text.length && text[i] === '\t'; i++) {
+    indent += '\t';
+  }
+  return indent;
+};
+
+const getLineContent = (text, pos) => {
+  let lineStart = text.lastIndexOf('\n', pos - 1) + 1;
+  let lineEnd = text.indexOf('\n', pos);
+  if (lineEnd === -1) lineEnd = text.length;
+  return text.slice(lineStart, lineEnd).trim();
+};
+
+const bracketMap = { '(': ')', '[': ']', '{': '}' };
+
 e.onkeydown = ev => {
   if (ev.ctrlKey) {
     const map = { s: save, o: () => f.click(), z: undo, y: redo };
@@ -39,20 +57,60 @@ e.onkeydown = ev => {
     e.value = e.value.slice(0,i) + "\t" + e.value.slice(i);
     e.selectionStart = e.selectionEnd = i + 1;
     render();
+    return;
+  }
+
+  if (bracketMap[ev.key]) {
+    ev.preventDefault();
+    const i = e.selectionStart;
+    const closingBracket = bracketMap[ev.key];
+    e.value = e.value.slice(0,i) + ev.key + closingBracket + e.value.slice(i);
+    e.selectionStart = e.selectionEnd = i + 1;
+    render();
+    return;
+  }
+
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    const i = e.selectionStart;
+    const currentLine = getLineContent(e.value, i);
+    const indent = getLineIndent(e.value, i);
+
+    const charBefore = e.value[i - 1];
+    const charAfter = e.value[i];
+
+    if (charBefore === '{' && charAfter === '}') {
+      const newIndent = indent + '\t';
+      e.value = e.value.slice(0,i) + "\n" + newIndent + "\n" + indent + e.value.slice(i);
+      e.selectionStart = e.selectionEnd = i + 1 + newIndent.length;
+    } else {
+      e.value = e.value.slice(0,i) + "\n" + indent + e.value.slice(i);
+      e.selectionStart = e.selectionEnd = i + 1 + indent.length;
+    }
+    render();
+    return;
   }
 };
 
 const undo = () => u.length && (r.push(e.value), e.value = u.pop(), render());
 const redo = () => r.length && (u.push(e.value), e.value = r.pop(), render());
 
-const save = () => {
-  file = prompt("Save file as:", file) || file;
-  const a = Object.assign(document.createElement("a"), {
-    href: URL.createObjectURL(new Blob([e.value])),
-    download: file
-  });
-  a.click();
-  URL.revokeObjectURL(a.href);
+const save = async () => {
+  try {
+    if (!window.fileHandle) {
+      window.fileHandle = await showSaveFilePicker({
+        suggestedName: file,
+        types: [{ description: 'Text Files', accept: { 'text/*': ['.txt', '.js'] } }]
+      });
+    }
+
+    const writable = await window.fileHandle.createWritable();
+    await writable.write(e.value);
+    await writable.close();
+    file = window.fileHandle.name;
+  } catch (err) {
+    console.error('Save failed:', err);
+  }
 };
 
 f.onchange = () => {
