@@ -20,6 +20,7 @@ html,body {
 	white-space:pre;
 	font-size:16px;
 	tab-size:4;
+	overflow:hidden;
 }
 #box {
 	flex:1;
